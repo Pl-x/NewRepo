@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Guide to Mitigating Memory Leaks</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Calm Harmony Neutrals -->
+    <!-- Application Structure Plan: The application is structured as a single-page dashboard with tab-based navigation to guide users through the process of dealing with a memory leak. The structure is thematic, not linear, allowing users to jump directly to the information they need: 1. Overview (What & Why), 2. Symptoms & Diagnosis (How to identify), 3. Causes (Interactive explorer), 4. Correction (Code solutions), 5. Prevention (Best practices). This task-oriented flow is more intuitive for a developer trying to solve a problem than the report's original linear format. Key interactions include filterable content for causes and tools, and interactive charts to visualize leak patterns, making abstract concepts concrete and actionable. -->
+    <!-- Visualization & Content Choices: 
+        - Report Info: "Sawtooth" & "Live Set Growth" patterns. Goal: Visualize abstract symptoms. Viz: Interactive Line Charts (Chart.js/Canvas). Interaction: Hover for details. Justification: Turns descriptive text into a recognizable visual diagnostic pattern.
+        - Report Info: Language-specific causes. Goal: Allow users to find relevant leak patterns quickly. Viz: Styled HTML cards. Interaction: Filter buttons (JS). Justification: Provides a personalized, fast path to relevant information, directly addressing the user's context (e.g., Node.js).
+        - Report Info: Table of profiling tools. Goal: Help users select the right tool. Viz: HTML table. Interaction: Filter buttons (JS). Justification: Improves on a static table by making it a utility.
+        - Report Info: Correction code examples. Goal: Show how to fix leaks. Viz: Side-by-side styled code blocks. Interaction: Toggle/Implicit. Justification: Clearly demonstrates the "before" and "after" of a fix.
+        - Report Info: Concepts like "Circular Reference". Goal: Explain abstract ideas. Viz: HTML/CSS diagram. Justification: A simple visual is easier to grasp than a paragraph of text.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #fdfdfc;
+            color: #333;
+        }
+        .nav-button {
+            transition: all 0.3s ease;
+            border-bottom: 2px solid transparent;
+        }
+        .nav-button.active {
+            color: #4a5568;
+            border-bottom-color: #4a5568;
+            font-weight: 600;
+        }
+        .content-section {
+            display: none;
+        }
+        .content-section.active {
+            display: block;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px;
+            max-height: 400px;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 350px;
+            }
+        }
+        .code-block {
+            background-color: #f3f4f6;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            overflow-x: auto;
+            font-family: monospace;
+            font-size: 0.875rem;
+        }
+        .filter-btn {
+            transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+        }
+        .filter-btn.active {
+            background-color: #4a5568;
+            color: #ffffff;
+        }
+        .card {
+            background-color: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            transition: box-shadow 0.3s ease;
+        }
+        .card:hover {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.07), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
+        }
+        .tag {
+            display: inline-block;
+            background-color: #e2e8f0;
+            color: #4a5568;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <div class="container mx-auto px-4 py-8">
+        <header class="text-center mb-12">
+            <h1 class="text-4xl md:text-5xl font-bold text-gray-800 mb-2">The Interactive Guide to Memory Leaks</h1>
+            <p class="text-lg text-gray-600 max-w-3xl mx-auto">An interactive dashboard to help you understand, diagnose, and prevent memory leaks in your applications.</p>
+        </header>
+
+        <nav class="flex justify-center border-b border-gray-200 mb-8 flex-wrap">
+            <button class="nav-button px-4 py-3 text-gray-600 hover:text-gray-800" data-target="overview">Overview</button>
+            <button class="nav-button px-4 py-3 text-gray-600 hover:text-gray-800" data-target="symptoms">Symptoms & Diagnosis</button>
+            <button class="nav-button px-4 py-3 text-gray-600 hover:text-gray-800" data-target="causes">Common Causes</button>
+            <button class="nav-button px-4 py-3 text-gray-600 hover:text-gray-800" data-target="correction">Correction</button>
+            <button class="nav-button px-4 py-3 text-gray-600 hover:text-gray-800" data-target="prevention">Prevention</button>
+        </nav>
+
+        <main>
+            <!-- Overview Section -->
+            <section id="overview" class="content-section">
+                <div class="max-w-4xl mx-auto">
+                    <div class="card mb-8">
+                        <h2 class="text-2xl font-bold text-gray-800 mb-4">What is a Memory Leak?</h2>
+                        <p class="text-gray-700 leading-relaxed">
+                            A memory leak is a type of resource leak that occurs when a computer program incorrectly manages memory allocations. In simple terms, it's when a piece of memory is allocated by a program but is never released back to the operating system after it's no longer needed. This unreleased memory accumulates over time, leading to performance degradation and eventual system failure. Even in languages with automatic Garbage Collection (GC), leaks can occur when unwanted objects remain "reachable" due to lingering references, preventing the GC from reclaiming their memory.
+                        </p>
+                    </div>
+                    <div class="grid md:grid-cols-2 gap-8">
+                        <div class="card">
+                            <h3 class="text-xl font-bold text-gray-800 mb-3">Why It Matters</h3>
+                            <ul class="space-y-3 text-gray-700">
+                                <li class="flex items-start"><span class="mr-3 text-xl">📉</span> <span><strong>Performance Degradation:</strong> Gradual slowdowns and sluggish response times.</span></li>
+                                <li class="flex items-start"><span class="mr-3 text-xl">💥</span> <span><strong>System Instability:</strong> Application freezes, crashes, and data loss.</span></li>
+                                <li class="flex items-start"><span class="mr-3 text-xl">💰</span> <span><strong>Increased Costs:</strong> In cloud environments, leaks can trigger autoscaling, leading to higher operational expenses.</span></li>
+                                <li class="flex items-start"><span class="mr-3 text-xl"> scalability-issues"></span> <span><strong>Scalability Issues:</strong> Limits the ability to handle more users or data.</span></li>
+                            </ul>
+                        </div>
+                        <div class="card">
+                            <h3 class="text-xl font-bold text-gray-800 mb-3">Dependency Update Dangers</h3>
+                            <p class="text-gray-700 mb-4">Your experience of a leak after a dependency update is a common and challenging scenario. Here's why:</p>
+                            <ul class="space-y-2 text-gray-700 text-sm">
+                                <li><strong>Semantic Changes:</strong> A library's internal behavior changes without any API change, making leaks hard to detect.</li>
+                                <li><strong>Unintended Side Effects:</strong> A bug fix in a library might inadvertently introduce a new memory management issue.</li>
+                                <li><strong>Transitive Leaks:</strong> The leak might not be in the library you updated, but in one of *its* dependencies.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Symptoms & Diagnosis Section -->
+            <section id="symptoms" class="content-section">
+                 <div class="text-center max-w-3xl mx-auto mb-10">
+                    <h2 class="text-3xl font-bold text-gray-800 mb-4">Is Your Application Leaking?</h2>
+                    <p class="text-gray-600">Memory leaks are insidious. They rarely cause immediate crashes, instead manifesting as a slow degradation of performance. This section helps you identify the tell-tale signs and introduces the tools needed for diagnosis.</p>
+                </div>
+                <div class="grid md:grid-cols-2 gap-8 mb-12">
+                    <div class="card">
+                        <h3 class="text-xl font-bold text-gray-800 mb-4">Visualizing Leak Patterns</h3>
+                        <p class="text-gray-600 mb-4">Monitoring tools often reveal distinctive memory usage patterns. Below are interactive examples of common leak indicators.</p>
+                        <div class="chart-container mb-4">
+                            <canvas id="sawtoothChart"></canvas>
+                        </div>
+                        <p class="text-sm text-gray-600 text-center">The "Sawtooth" pattern shows memory steadily increasing, then dropping sharply upon restart—a classic sign of a leak.</p>
+                    </div>
+                    <div class="card">
+                        <h3 class="text-xl font-bold text-gray-800 mb-4">Live Set Growth (Java/GC)</h3>
+                        <p class="text-gray-600 mb-4">In garbage-collected environments, a key indicator is the "live set"—memory that remains after a full garbage collection. A continually growing live set under stable load strongly suggests a leak.</p>
+                        <div class="chart-container">
+                            <canvas id="liveSetChart"></canvas>
+                        </div>
+                        <p class="text-sm text-gray-600 text-center">Notice how the baseline memory usage (after each GC dip) keeps rising over time.</p>
+                    </div>
+                </div>
+
+                <div class="card max-w-5xl mx-auto">
+                    <h3 class="text-2xl font-bold text-gray-800 mb-6 text-center">Diagnostic Toolkit</h3>
+                     <div class="flex justify-center mb-6 space-x-2 flex-wrap">
+                        <button class="filter-btn px-4 py-2 rounded-full bg-gray-200 text-gray-700" data-tool-lang="All">All</button>
+                        <button class="filter-btn px-4 py-2 rounded-full bg-gray-200 text-gray-700" data-tool-lang="JavaScript/Node.js">JavaScript/Node.js</button>
+                        <button class="filter-btn px-4 py-2 rounded-full bg-gray-200 text-gray-700" data-tool-lang="Java">Java</button>
+                        <button class="filter-btn px-4 py-2 rounded-full bg-gray-200 text-gray-700" data-tool-lang="Python">Python</button>
+                        <button class="filter-btn px-4 py-2 rounded-full bg-gray-200 text-gray-700" data-tool-lang="C/C++">C/C++</button>
+                        <button class="filter-btn px-4 py-2 rounded-full bg-gray-200 text-gray-700" data-tool-lang=".NET">.NET</button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left" id="tools-table">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="p-4 font-semibold">Tool</th>
+                                    <th class="p-4 font-semibold">Environment</th>
+                                    <th class="p-4 font-semibold">Key Features</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tools-table-body">
+                                <!-- JS will populate this -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Common Causes Section -->
+            <section id="causes" class="content-section">
+                <div class="text-center max-w-3xl mx-auto mb-10">
+                    <h2 class="text-3xl font-bold text-gray-800 mb-4">Where Do Leaks Come From?</h2>
+                    <p class="text-gray-600">Leaks can stem from general programming errors or from pitfalls specific to a language or framework. Use the filters below to explore common causes relevant to your tech stack.</p>
+                </div>
+
+                <div class="flex justify-center mb-8 space-x-2 flex-wrap">
+                    <button class="filter-btn px-4 py-2 rounded-full bg-gray-200 text-gray-700" data-cause-lang="All">All</button>
+                    <button class="filter-btn px-4 py-2 rounded-full bg-gray-200 text-gray-700" data-cause-lang="General">General</button>
+                    <button class="filter-btn px-4 py-2 rounded-full bg-gray-200 text-gray-700" data-cause-lang="JavaScript/Node.js">JavaScript/Node.js</button>
+                    <button class="filter-btn px-4 py-2 rounded-full bg-gray-200 text-gray-700" data-cause-lang="Java">Java</button>
+                    <button class="filter-btn px-4 py-2 rounded-full bg-gray-200 text-gray-700" data-cause-lang="Python">Python</button>
+                    <button class="filter-btn px-4 py-2 rounded-full bg-gray-200 text-gray-700" data-cause-lang="C/C++">C/C++</button>
+                    <button class="filter-btn px-4 py-2 rounded-full bg-gray-200 text-gray-700" data-cause-lang="React/Angular">React/Angular</button>
+                </div>
+
+                <div id="causes-grid" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
+                    <!-- JS will populate this -->
+                </div>
+            </section>
+
+            <!-- Correction Section -->
+            <section id="correction" class="content-section">
+                <div class="text-center max-w-3xl mx-auto mb-10">
+                    <h2 class="text-3xl font-bold text-gray-800 mb-4">Fixing the Leaks</h2>
+                    <p class="text-gray-600">Once you've identified the source, fixing a leak often involves applying specific cleanup patterns. This section provides practical code examples for common leak scenarios.</p>
+                </div>
+                <div id="correction-list" class="space-y-8 max-w-4xl mx-auto">
+                    <!-- JS will populate this -->
+                </div>
+            </section>
+
+            <!-- Prevention Section -->
+            <section id="prevention" class="content-section">
+                <div class="text-center max-w-3xl mx-auto mb-10">
+                    <h2 class="text-3xl font-bold text-gray-800 mb-4">Building Leak-Proof Software</h2>
+                    <p class="text-gray-600">The best way to handle memory leaks is to prevent them from happening in the first place. This requires a combination of secure coding practices, automated testing, and continuous monitoring.</p>
+                </div>
+                <div class="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+                     <div class="card">
+                        <h3 class="text-xl font-bold text-gray-800 mb-3">🛡️ Secure Coding</h3>
+                        <ul class="space-y-2 text-gray-700">
+                            <li>- Understand your language's memory model.</li>
+                            <li>- Minimize global/static variables.</li>
+                            <li>- Use smart pointers in C++.</li>
+                            <li>- Manage component lifecycles meticulously.</li>
+                            <li>- Adopt immutability where possible.</li>
+                        </ul>
+                    </div>
+                    <div class="card">
+                        <h3 class="text-xl font-bold text-gray-800 mb-3">⚙️ Automated Testing</h3>
+                        <ul class="space-y-2 text-gray-700">
+                            <li>- Integrate profiling tools into CI/CD.</li>
+                            <li>- Write unit tests with memory checks.</li>
+                            <li>- Run long-running stress tests.</li>
+                            <li>- Automate tests for real-world scenarios.</li>
+                        </ul>
+                    </div>
+                    <div class="card">
+                        <h3 class="text-xl font-bold text-gray-800 mb-3">📡 Continuous Monitoring</h3>
+                        <ul class="space-y-2 text-gray-700">
+                           <li>- Set up alerts for anomalous memory growth.</li>
+                           <li>- Periodically analyze production heap dumps.</li>
+                           <li>- Monitor the "live set" in GC environments.</li>
+                           <li>- Use restart policies as a temporary fix only.</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <script>
+        const data = {
+            tools: [
+                { name: 'Chrome DevTools', lang: 'JavaScript/Node.js', features: 'Heap snapshots, comparison view, retainer paths, detached DOM node detection.' },
+                { name: 'Valgrind (Memcheck)', lang: 'C/C++', features: 'Detects leaks, invalid memory access. Provides stack traces for allocations.' },
+                { name: 'VisualVM', lang: 'Java', features: 'All-in-one visual tool for monitoring heap usage, GC activity, and threads.' },
+                { name: 'Eclipse MAT', lang: 'Java', features: 'Powerful Java heap dump analyzer. Calculates retained sizes and finds GC roots.' },
+                { name: 'tracemalloc', lang: 'Python', features: 'Built-in module to track memory allocation by source location and size.' },
+                { name: 'objgraph', lang: 'Python', features: 'Visualizes object relationships and finds back-references to identify retained objects.' },
+                { name: 'dotMemory', lang: '.NET', features: 'Comprehensive memory profiler with timeline views and automatic issue detection.' },
+                { name: 'LeakSanitizer', lang: 'C/C++', features: 'Fast, integrated memory leak detector, often used with AddressSanitizer.' },
+                { name: 'NLeak', lang: 'JavaScript/Node.js', features: 'Automatic leak detection and diagnosis tool for Node.js, CI/CD integration.' },
+                { name: 'pprof', lang: 'Go', features: 'Go\'s standard library tool for profiling memory and CPU usage.' },
+                { name: 'Flutter DevTools', lang: 'Flutter', features: 'Official profiler for Flutter apps, tracks allocations and displays memory graphs.' },
+                { name: 'Android Studio Profiler', lang: 'Android', features: 'Captures heap dumps, analyzes memory usage, identifies retained activities.' },
+            ],
+            causes: [
+                { title: 'Unclosed Resources', lang: ['General'], description: 'Failure to close file streams, database connections, or network sockets after use. A very common source of leaks across all languages.' },
+                { title: 'Global/Static Variables', lang: ['General', 'Java', 'JavaScript/Node.js'], description: 'Objects referenced by global or static variables persist for the application\'s lifetime, preventing garbage collection even when logically unneeded.' },
+                { title: 'Circular References', lang: ['General', 'Python'], description: 'Two or more objects reference each other in a closed loop, which can prevent some garbage collectors from reclaiming their memory.' },
+                { title: 'Unremoved Event Listeners', lang: ['JavaScript/Node.js', 'React/Angular'], description: 'Attaching event listeners to global objects or DOM elements but failing to remove them when the component unmounts. A top cause of leaks in web apps.' },
+                { title: 'Forgotten Timers/Intervals', lang: ['JavaScript/Node.js', 'React/Angular'], description: '`setTimeout` or `setInterval` calls that are not cleared can keep running, holding onto references to objects in their scope.' },
+                { title: 'Detached DOM Trees', lang: ['JavaScript/Node.js'], description: 'Keeping a reference to a DOM element that has been removed from the document tree prevents the entire subtree from being garbage collected.' },
+                { title: 'Closures', lang: ['JavaScript/Node.js'], description: 'An inner function (closure) can hold a reference to a large object from its outer scope, keeping it in memory as long as the closure exists.' },
+                { title: 'Unsubscribed Observables', lang: ['React/Angular'], description: 'In Angular, failing to unsubscribe from observables in `ngOnDestroy` keeps the subscription active, preventing component cleanup.' },
+                { title: 'Non-static Inner Classes', lang: ['Java'], description: 'A non-static inner class holds an implicit reference to its outer class. If the inner class object outlives the outer class, it leaks the outer class.' },
+                { title: 'ThreadLocal Mismanagement', lang: ['Java'], description: 'Forgetting to call `remove()` on `ThreadLocal` variables in thread pools can cause threads to retain objects indefinitely.' },
+                { title: 'Improper `equals()` & `hashCode()`', lang: ['Java'], description: 'Incorrect implementations can cause duplicate objects to accumulate in hash-based collections like `HashMap`.' },
+                { title: 'Manual Memory Mismanagement', lang: ['C/C++'], description: 'The classic leak: allocating memory with `malloc` or `new` but forgetting to deallocate it with `free` or `delete`.' },
+                { title: 'Dangling Pointers', lang: ['C/C++'], description: 'Pointers that refer to memory that has already been deallocated can lead to unpredictable behavior and memory corruption.' },
+                { title: 'C Extensions in Python', lang: ['Python'], description: 'Leaks in the underlying C code of a Python extension will manifest as memory leaks in the Python application.' },
+            ],
+            corrections: [
+                { 
+                    title: 'Unsubscribing from Event Listeners (React)',
+                    description: 'In React, always use the cleanup function returned by `useEffect` to remove event listeners added to global objects like `window` or `document`.',
+                    code: {
+                        before: `useEffect(() => {\n  window.addEventListener('resize', handleResize);\n}, []);`,
+                        after: `useEffect(() => {\n  window.addEventListener('resize', handleResize);\n  return () => {\n    window.removeEventListener('resize', handleResize);\n  };\n}, []);`
+                    }
+                },
+                { 
+                    title: 'Clearing Timers (JavaScript)',
+                    description: 'Any `setInterval` or `setTimeout` must be stored in a variable and cleared using `clearInterval` or `clearTimeout` when it\'s no longer needed.',
+                    code: {
+                        before: `useEffect(() => {\n  const timerId = setInterval(tick, 1000);\n}, []);`,
+                        after: `useEffect(() => {\n  const timerId = setInterval(tick, 1000);\n  return () => {\n    clearInterval(timerId);\n  };\n}, []);`
+                    }
+                },
+                { 
+                    title: 'Aborting API Calls (Fetch API)',
+                    description: 'To prevent trying to update state on an unmounted component, use an `AbortController` to cancel `fetch` requests in the `useEffect` cleanup function.',
+                    code: {
+                        before: `useEffect(() => {\n  fetch('/api/data').then(res => res.json()).then(setData);\n}, []);`,
+                        after: `useEffect(() => {\n  const controller = new AbortController();\n  fetch('/api/data', { signal: controller.signal })\n    .then(res => res.json())\n    .then(setData)\n    .catch(err => {\n       if (err.name !== 'AbortError') { /* handle error */ }\n    });\n\n  return () => {\n    controller.abort();\n  };\n}, []);`
+                    }
+                },
+                { 
+                    title: 'Using `try-with-resources` (Java)',
+                    description: 'In Java, this construct ensures that each resource is closed at the end of the statement, preventing resource leaks from unclosed streams or connections.',
+                    code: {
+                        before: `FileInputStream fis = null;\ntry {\n  fis = new FileInputStream("file.txt");\n  // ... use fis\n} finally {\n  if (fis != null) fis.close();\n}`,
+                        after: `try (FileInputStream fis = new FileInputStream("file.txt")) {\n  // ... use fis\n}\n// fis is automatically closed here`
+                    }
+                }
+            ]
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const navButtons = document.querySelectorAll('.nav-button');
+            const contentSections = document.querySelectorAll('.content-section');
+            const causeFilterButtons = document.querySelectorAll('[data-cause-lang]');
+            const toolFilterButtons = document.querySelectorAll('[data-tool-lang]');
+            
+            const causesGrid = document.getElementById('causes-grid');
+            const toolsTableBody = document.getElementById('tools-table-body');
+            const correctionList = document.getElementById('correction-list');
+
+            function setActiveTab(targetId) {
+                navButtons.forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.target === targetId);
+                });
+                contentSections.forEach(section => {
+                    section.classList.toggle('active', section.id === targetId);
+                });
+            }
+
+            navButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    setActiveTab(button.dataset.target);
+                });
+            });
+            
+            function populateCauses(filter = 'All') {
+                causesGrid.innerHTML = '';
+                const filteredCauses = filter === 'All' 
+                    ? data.causes 
+                    : data.causes.filter(c => c.lang.includes(filter));
+
+                filteredCauses.forEach(cause => {
+                    const card = document.createElement('div');
+                    card.className = 'card';
+                    card.innerHTML = `
+                        <h4 class="text-lg font-bold text-gray-800 mb-2">${cause.title}</h4>
+                        <div class="mb-3">${cause.lang.map(l => `<span class="tag">${l}</span>`).join(' ')}</div>
+                        <p class="text-gray-600 text-sm">${cause.description}</p>
+                    `;
+                    causesGrid.appendChild(card);
+                });
+            }
+            
+            function populateTools(filter = 'All') {
+                toolsTableBody.innerHTML = '';
+                const filteredTools = filter === 'All' 
+                    ? data.tools 
+                    : data.tools.filter(t => t.lang.includes(filter));
+
+                filteredTools.forEach(tool => {
+                    const row = document.createElement('tr');
+                    row.className = 'border-b border-gray-200 hover:bg-gray-50';
+                    row.innerHTML = `
+                        <td class="p-4 font-medium">${tool.name}</td>
+                        <td class="p-4">${tool.lang}</td>
+                        <td class="p-4 text-sm text-gray-600">${tool.features}</td>
+                    `;
+                    toolsTableBody.appendChild(row);
+                });
+            }
+
+            function populateCorrections() {
+                correctionList.innerHTML = '';
+                data.corrections.forEach(item => {
+                    const element = document.createElement('div');
+                    element.className = 'card';
+                    element.innerHTML = `
+                        <h4 class="text-xl font-bold text-gray-800 mb-2">${item.title}</h4>
+                        <p class="text-gray-600 mb-4">${item.description}</p>
+                        <div class="grid md:grid-cols-2 gap-4">
+                            <div>
+                                <h5 class="font-semibold mb-2 text-red-600">Before (Leaky)</h5>
+                                <div class="code-block"><pre><code>${item.code.before.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</code></pre></div>
+                            </div>
+                            <div>
+                                <h5 class="font-semibold mb-2 text-green-600">After (Fixed)</h5>
+                                <div class="code-block"><pre><code>${item.code.after.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</code></pre></div>
+                            </div>
+                        </div>
+                    `;
+                    correctionList.appendChild(element);
+                });
+            }
+
+            causeFilterButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    causeFilterButtons.forEach(btn => btn.classList.remove('active'));
+                    button.classList.add('active');
+                    populateCauses(button.dataset.causeLang);
+                });
+            });
+
+            toolFilterButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    toolFilterButtons.forEach(btn => btn.classList.remove('active'));
+                    button.classList.add('active');
+                    populateTools(button.dataset.toolLang);
+                });
+            });
+
+            function createChart(ctx, type, data, options) {
+                new Chart(ctx, { type, data, options });
+            }
+
+            function renderCharts() {
+                const sawtoothCtx = document.getElementById('sawtoothChart')?.getContext('2d');
+                if (sawtoothCtx) {
+                    createChart(sawtoothCtx, 'line', {
+                        labels: Array.from({length: 20}, (_, i) => `T${i}`),
+                        datasets: [{
+                            label: 'Memory Usage (MB)',
+                            data: [100, 110, 125, 145, 160, 105, 120, 140, 165, 190, 115, 135, 155, 180, 210, 125, 150, 175, 205, 240],
+                            borderColor: 'rgb(220, 38, 38)',
+                            backgroundColor: 'rgba(220, 38, 38, 0.1)',
+                            fill: true,
+                            tension: 0.1
+                        }]
+                    }, { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }}, scales: { y: { beginAtZero: true, title: { display: true, text: 'Memory (MB)' } }} });
+                }
+
+                const liveSetCtx = document.getElementById('liveSetChart')?.getContext('2d');
+                if (liveSetCtx) {
+                    createChart(liveSetCtx, 'line', {
+                        labels: Array.from({length: 10}, (_, i) => `GC Cycle ${i+1}`),
+                        datasets: [{
+                            label: 'Memory After Full GC (MB)',
+                            data: [50, 55, 62, 70, 81, 90, 102, 115, 128, 145],
+                            borderColor: 'rgb(59, 130, 246)',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            fill: true,
+                            tension: 0.4
+                        }]
+                    }, { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }}, scales: { y: { beginAtZero: true, title: { display: true, text: 'Memory (MB)' } }} });
+                }
+            }
+            
+            // Initial setup
+            setActiveTab('overview');
+            document.querySelector('[data-cause-lang="All"]').classList.add('active');
+            document.querySelector('[data-tool-lang="All"]').classList.add('active');
+            populateCauses();
+            populateTools();
+            populateCorrections();
+            renderCharts();
+        });
+    </script>
+</body>
+</html>
