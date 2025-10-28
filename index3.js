@@ -8,7 +8,7 @@ const errorMessage = document.getElementById('error-message');
 // === ⚠️ CRITICAL: UPDATE THESE PLACEHOLDERS WITH YOUR API DETAILS ===
 // =================================================================
 const API_BASE_URL = 'https://qrcode3.p.rapidapi.com/qrcode/text'; 
-const API_KEY = '3451ab4391mshb33b42b40718a5fp186af6jsn81fc3033d58a'; // Replace with your actual key
+const API_KEY = ; // Replace with your actual key
 const API_HOST = 'qrcode3.p.rapidapi.com';
 // =================================================================
 
